@@ -1,0 +1,10 @@
+{
+  "name": "team-default",
+  "blockVerdicts": ["MALICIOUS"],
+  "warnVerdicts": ["SUSPICIOUS"],
+  "blockOnCriticalIocs": true,
+  "blockOnSecretExposure": true,
+  "blockOnWorkflowTampering": true,
+  "blockOnTyposquatDistance": 1,
+  "reviewSuspiciousPackages": true
+}

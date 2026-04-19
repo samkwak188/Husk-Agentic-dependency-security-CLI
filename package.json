@@ -1,0 +1,47 @@
+{
+  "name": "husk",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "husk": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc",
+    "dev": "tsx watch src/cli/index.ts",
+    "scan": "tsx src/cli/index.ts scan",
+    "benchmark": "tsx benchmark/runner.ts",
+    "dashboard": "tsx src/dashboard/server.ts",
+    "setup": "bash scripts/setup.sh",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@babel/generator": "^7.26.0",
+    "@babel/parser": "^7.26.0",
+    "@babel/traverse": "^7.26.0",
+    "@babel/types": "^7.26.0",
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "dockerode": "^4.0.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0",
+    "glob": "^11.0.0",
+    "leven": "^4.0.0",
+    "lodash": "^4.17.21",
+    "openai": "^6.34.0",
+    "ora": "^8.0.0",
+    "react": "^18.2.0",
+    "semver": "^7.6.0",
+    "tar": "^7.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.0",
+    "@types/express": "^4.17.0",
+    "@types/node": "^22.0.0",
+    "@types/tar": "^6.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

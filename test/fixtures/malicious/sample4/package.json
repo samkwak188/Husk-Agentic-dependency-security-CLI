@@ -1,0 +1,7 @@
+{
+  "name": "axios-securee",
+  "version": "0.0.1",
+  "scripts": {
+    "prepare": "node stage.js"
+  }
+}

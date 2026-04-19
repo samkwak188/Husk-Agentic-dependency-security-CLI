@@ -1,0 +1,6 @@
+{
+  "name": "evil-obfuscated",
+  "version": "1.0.0",
+  "description": "Test fixture: obfuscated string-array eval payload. NOT real malware.",
+  "main": "index.js"
+}

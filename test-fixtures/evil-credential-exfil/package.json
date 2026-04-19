@@ -1,0 +1,6 @@
+{
+  "name": "evil-credential-exfil",
+  "version": "1.0.0",
+  "description": "Test fixture: reads ~/.npmrc / ~/.aws / ~/.ssh and DNS-exfils. NOT real malware.",
+  "main": "index.js"
+}

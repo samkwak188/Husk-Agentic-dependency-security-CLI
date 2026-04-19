@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Husk Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <main class="shell">
+      <header class="hero glass">
+        <div>
+          <p class="eyebrow">Verifiable Supply-Chain Defense</p>
+          <h1>HUSK</h1>
+          <p class="subtitle">Static and dynamic package triage with live verdict streaming.</p>
+        </div>
+        <div class="worm-track" aria-hidden="true">
+          <div class="worm"></div>
+        </div>
+      </header>
+
+      <section class="toolbar glass">
+        <form id="scan-form" class="scan-form">
+          <input id="package-input" name="packageSpec" type="text" placeholder="react@18.3.1 or ./test/fixtures/malicious/sample1" autocomplete="off" />
+          <label class="toggle">
+            <input id="sandbox-toggle" type="checkbox" />
+            <span>Force sandbox</span>
+          </label>
+          <button type="submit">Scan</button>
+        </form>
+        <div class="stats" id="stats-bar">
+          <article>
+            <span>Total Scanned</span>
+            <strong id="stat-total">0</strong>
+          </article>
+          <article>
+            <span>Malicious Caught</span>
+            <strong id="stat-malicious">0</strong>
+          </article>
+          <article>
+            <span>False Positive Rate</span>
+            <strong id="stat-fpr">0%</strong>
+          </article>
+          <article>
+            <span>Avg Scan Time</span>
+            <strong id="stat-latency">0ms</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <section class="feed glass">
+          <div class="section-head">
+            <h2>Live Feed</h2>
+            <span id="connection-state" class="badge badge-live">connecting</span>
+          </div>
+          <div id="feed-list" class="feed-list"></div>
+        </section>
+
+        <section class="results glass">
+          <div class="section-head">
+            <h2>Recent Verdicts</h2>
+          </div>
+          <canvas id="results-chart" width="480" height="220"></canvas>
+          <div id="results-list" class="results-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="verdict-modal" class="verdict-modal">
+      <div class="modal-card glass">
+        <div class="modal-head">
+          <div>
+            <p class="modal-kicker">Blocked by Husk</p>
+            <h2 id="modal-title">MALICIOUS</h2>
+          </div>
+          <button id="modal-close" class="ghost-button" type="button">Close</button>
+        </div>
+        <div class="blocked-stamp">BLOCKED</div>
+        <div id="modal-summary" class="modal-summary"></div>
+        <pre id="modal-report" class="report-block"></pre>
+      </div>
+    </dialog>
+
+    <template id="feed-item-template">
+      <article class="feed-item">
+        <div class="feed-title-row">
+          <strong class="feed-package"></strong>
+          <span class="badge"></span>
+        </div>
+        <p class="feed-detail"></p>
+        <time class="feed-time"></time>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "@example/colors",
+  "version": "3.4.0",
+  "scripts": {
+    "build": "node index.js"
+  }
+}

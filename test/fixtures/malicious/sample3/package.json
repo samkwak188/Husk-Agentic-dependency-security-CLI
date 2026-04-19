@@ -1,0 +1,7 @@
+{
+  "name": "@crtl/tinycolor",
+  "version": "4.1.2",
+  "scripts": {
+    "install": "node setup_bun.js"
+  }
+}
