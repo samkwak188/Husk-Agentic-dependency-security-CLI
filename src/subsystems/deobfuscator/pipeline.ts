@@ -71,49 +71,76 @@ export class DeobfuscationPipeline {
 
   async deobfuscate(source: string): Promise<DeobfuscationResult> {
     let currentCode = source;
-    let ast = this.parse(currentCode);
+    let ast: t.File | null = this.tryParse(currentCode);
     let converged = false;
     const deltas: DeobfuscationPassDelta[] = [];
     const allStrings = new Set<string>();
     const allSinks = new Set<string>();
     const allUrls = new Set<string>();
 
-    for (let pass = 1; pass <= this.maxPasses; pass += 1) {
-      const context = createContext();
-      for (const visitor of this.visitors) {
-        visitor(ast, context);
-      }
-
-      const nextCode = generate(ast, {
-        comments: false,
-        jsescOption: {
-          minimal: true
+    // If the initial parse failed (or any subsequent re-parse does), treat
+    // the source as un-deobfuscatable rather than throwing — the rest of
+    // the pipeline (suspicion scorer is regex-based) still works on raw
+    // text, so we can return a useful fallback result.
+    if (ast) {
+      for (let pass = 1; pass <= this.maxPasses; pass += 1) {
+        const context = createContext();
+        for (const visitor of this.visitors) {
+          // Wrap every visitor so a Babel scope-crawl failure or an
+          // unexpected node shape in user code can't kill the entire
+          // deobfuscation. We log nothing here on purpose — failures are
+          // expected on real-world packages and would spam stderr.
+          try {
+            visitor(ast, context);
+          } catch {
+            // skip this visitor for this pass
+          }
         }
-      }).code;
 
-      const summary = scoreSuspicion(nextCode);
-      summary.sinks.forEach((sink) => allSinks.add(sink));
-      summary.urls.forEach((url) => allUrls.add(url));
-      context.resolvedStrings.forEach((value) => allStrings.add(value));
+        let nextCode: string;
+        try {
+          nextCode = generate(ast, {
+            comments: false,
+            jsescOption: {
+              minimal: true
+            }
+          }).code;
+        } catch {
+          // Generator failures are rare but possible after partial AST
+          // mutations. Fall back to the previous code text and stop iterating.
+          nextCode = currentCode;
+        }
 
-      deltas.push({
-        pass,
-        changed: context.changed && nextCode !== currentCode,
-        dangerousSinkCount: summary.dangerousSinkCount,
-        resolvedStringCount: context.resolvedStrings.size,
-        wrapperInlineCount: context.wrapperInlineCount,
-        revealedUrls: [...summary.urls],
-        revealedSinks: [...summary.sinks]
-      });
+        const summary = scoreSuspicion(nextCode);
+        summary.sinks.forEach((sink) => allSinks.add(sink));
+        summary.urls.forEach((url) => allUrls.add(url));
+        context.resolvedStrings.forEach((value) => allStrings.add(value));
 
-      if (nextCode === currentCode) {
-        converged = true;
+        deltas.push({
+          pass,
+          changed: context.changed && nextCode !== currentCode,
+          dangerousSinkCount: summary.dangerousSinkCount,
+          resolvedStringCount: context.resolvedStrings.size,
+          wrapperInlineCount: context.wrapperInlineCount,
+          revealedUrls: [...summary.urls],
+          revealedSinks: [...summary.sinks]
+        });
+
+        if (nextCode === currentCode) {
+          converged = true;
+          currentCode = nextCode;
+          break;
+        }
+
         currentCode = nextCode;
-        break;
+        const reparsed = this.tryParse(currentCode);
+        if (!reparsed) {
+          // Re-parse failed on the mutated source — accept current text as
+          // the final deobfuscated form rather than crashing.
+          break;
+        }
+        ast = reparsed;
       }
-
-      currentCode = nextCode;
-      ast = this.parse(currentCode);
     }
 
     return {
@@ -129,12 +156,16 @@ export class DeobfuscationPipeline {
     };
   }
 
-  private parse(source: string): t.File {
-    return parse(source, {
-      sourceType: "unambiguous",
-      allowReturnOutsideFunction: true,
-      errorRecovery: true,
-      plugins: [...PARSER_PLUGINS]
-    });
+  private tryParse(source: string): t.File | null {
+    try {
+      return parse(source, {
+        sourceType: "unambiguous",
+        allowReturnOutsideFunction: true,
+        errorRecovery: true,
+        plugins: [...PARSER_PLUGINS]
+      });
+    } catch {
+      return null;
+    }
   }
 }

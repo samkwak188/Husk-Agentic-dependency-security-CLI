@@ -24,9 +24,12 @@ import {
   DEFAULT_PORT,
   disableIntercept,
   enableIntercept,
+  getBannerLogPath,
   getInterceptLogPath,
   getInterceptStatus,
-  readInterceptLog
+  getShellInitScript,
+  readInterceptLog,
+  watchBannerLog
 } from "./intercept.js";
 import {
   box,
@@ -797,10 +800,28 @@ program
   .option("--disable", "Disable npm registry interception")
   .option("--status", "Show whether the intercept proxy is running")
   .option("--logs", "Print recent entries from .husk/intercept.log")
+  .option("--watch", "Live-follow ~/.husk/banner.log (allow / warn / block events as they happen)")
+  .option("--shell-init", "Print the shell snippet that makes banners appear inline (eval $(husk intercept --shell-init))")
   .option("--tail <n>", "Number of log lines to print with --logs", "50")
   .option("--port <port>", "Local registry proxy port", String(DEFAULT_PORT))
   .action(async (options) => {
     const port = Number(options.port);
+
+    if (options.shellInit) {
+      // Plain stdout — no banners, no styling. Designed for `eval "$(husk intercept --shell-init)"`.
+      process.stdout.write(getShellInitScript());
+      return;
+    }
+
+    if (options.watch) {
+      console.log(PALETTE.highlight.bold("  Husk live banner watcher"));
+      console.log(`  ${PALETTE.muted("source")}  ${getBannerLogPath()}`);
+      console.log(PALETTE.muted("  Press Ctrl+C to stop. Banners written by the intercept daemon"));
+      console.log(PALETTE.muted("  will appear below as soon as a tarball is scanned."));
+      console.log("");
+      await watchBannerLog();
+      return;
+    }
 
     if (options.logs) {
       const limit = Math.max(1, Number(options.tail) || 50);
@@ -825,6 +846,7 @@ program
             blocked: PALETTE.danger,
             warned: PALETTE.warn,
             allowed: PALETTE.safe,
+            "tty-breadcrumb-disabled": PALETTE.muted,
             "tty-breadcrumb-error": PALETTE.muted,
             "tty-breadcrumb-write-error": PALETTE.muted,
             "tty-breadcrumb-throw": PALETTE.muted
@@ -879,23 +901,37 @@ program
       const action = result.restarted ? "restarted" : "enabled";
       console.log(PALETTE.safe.bold(`  ✓ Husk interception ${action}`) + PALETTE.muted(` on http://localhost:${result.port} (pid ${result.pid})`));
       console.log(PALETTE.muted(`    .npmrc now points npm at the Husk proxy. Plain 'npm install' is gated.`));
-      if (result.ttyPath) {
-        console.log(PALETTE.muted(`    Live takedown banners will appear in this terminal (${result.ttyPath}).`));
+      console.log("");
+
+      // Inline-banner setup. macOS won't let the daemon write to your TTY by
+      // path, so banners are routed through ~/.husk/banner.log. The shell
+      // hook prints any new lines from that file before each prompt — i.e.
+      // immediately after `npm install` finishes, in the same tab. The hook
+      // is persistent (rc-file source line) but new shells need to re-source,
+      // and the *current* shell needs an `eval` to activate without restart.
+      console.log(PALETTE.highlight.bold("    Inline banners in THIS terminal — run once now:"));
+      console.log(`      ${PALETTE.command.bold(`eval "$(husk intercept --shell-init)"`)}`);
+      console.log(PALETTE.muted(`      After this, every \`npm install …\` prints the Husk verdict above your next prompt.`));
+      console.log("");
+      if (result.shellHook.installed) {
+        console.log(PALETTE.safe(`    ✓ Persistent hook installed in ${result.shellHook.rcPath}`));
+        console.log(PALETTE.muted(`      All NEW terminal tabs will have inline banners automatically.`));
+      } else if (result.shellHook.alreadyInstalled) {
+        console.log(PALETTE.muted(`    ✓ Persistent hook already present in ${result.shellHook.rcPath} (no changes).`));
       } else {
-        console.log(PALETTE.warn(`    ⚠ No controlling TTY detected — live banners disabled.`));
-        console.log(PALETTE.muted(`      Run 'husk intercept --enable' from an interactive shell to enable them,`));
-        console.log(PALETTE.muted(`      or use 'husk intercept --logs' to review events after the fact.`));
+        console.log(PALETTE.warn(`    ⚠ Could not auto-install persistent hook${result.shellHook.reason ? ` (${result.shellHook.reason})` : ""}.`));
+        console.log(PALETTE.muted(`      Add this line to your shell rc manually:`));
+        console.log(`        ${PALETTE.command(`[ -f "${result.shellInitPath}" ] && source "${result.shellInitPath}"`)}`);
       }
       console.log("");
-      console.log(PALETTE.highlight.bold("    Recommended workflow:"));
-      console.log(`      ${PALETTE.command.bold("npm install <pkg>@<ver>")} ${PALETTE.muted("(transitive deps + tarballs are scanned)")}`);
-      console.log(`      ${PALETTE.command.bold("husk intercept --logs")}    ${PALETTE.muted("(view registry-takedown / block events)")}`);
+      console.log(PALETTE.highlight.bold("    Other ways to view decisions:"));
+      console.log(`      ${PALETTE.command.bold("husk intercept --watch")}   ${PALETTE.muted(`(live tail of ${getBannerLogPath()} in any tab)`)}`);
+      console.log(`      ${PALETTE.command.bold("husk intercept --logs")}    ${PALETTE.muted("(JSON history of every event)")}`);
       console.log(`      ${PALETTE.command.bold("husk intercept --disable")} ${PALETTE.muted("(restore npmrc, stop proxy)")}`);
       console.log("");
-      console.log(PALETTE.muted(`    Note: pinned-version takedowns (e.g. unpublished versions) cause npm`));
-      console.log(PALETTE.muted(`    to fail with ETARGET. Husk surfaces a takedown banner above the npm`));
-      console.log(PALETTE.muted(`    error and logs the event to ${getInterceptLogPath()}.`));
-      console.log(PALETTE.muted(`    For a full verdict card, also run: ${PALETTE.command("husk scan <pkg>@<ver>")}`));
+      console.log(PALETTE.muted(`    Pinned-version takedowns cause npm to fail with ETARGET; the takedown`));
+      console.log(PALETTE.muted(`    is recorded in ${getInterceptLogPath()}.`));
+      console.log(PALETTE.muted(`    For a full verdict card, run: ${PALETTE.command("husk scan <pkg>@<ver>")}`));
       console.log("");
       return;
     }
@@ -906,7 +942,7 @@ program
       return;
     }
 
-    console.log(PALETTE.muted("Use --enable, --disable, --status, or --logs."));
+    console.log(PALETTE.muted("Use --enable, --disable, --status, --watch, or --logs."));
   });
 
 program

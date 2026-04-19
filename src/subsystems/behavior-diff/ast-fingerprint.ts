@@ -48,7 +48,15 @@ function collectCapabilities(source: string): Set<string> {
     return capabilities;
   }
 
-  traverse(ast, {
+  // Babel's scope crawler throws on real-world JS that has scope conflicts
+  // (e.g. `let res` declared twice in the same block, common in older sloppy
+  // code or some bundler output). Without this guard, one such file kills
+  // the entire scan because the rejection propagates through the
+  // BehaviorDiff Promise.all into the orchestrator. Treat any traverse
+  // failure as "this file is unfingerprintable" and return whatever we
+  // collected before the failure point — partial signal beats no scan.
+  try {
+    traverse(ast, {
     VariableDeclarator(path: any) {
       const { node } = path;
       if (
@@ -105,7 +113,10 @@ function collectCapabilities(source: string): Set<string> {
         capabilities.add(`url:${path.node.value}`);
       }
     }
-  });
+    });
+  } catch {
+    // Capability-collection is best-effort; partial output is fine.
+  }
 
   return capabilities;
 }
