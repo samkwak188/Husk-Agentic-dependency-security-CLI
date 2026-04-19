@@ -1,5 +1,7 @@
 # Husk
 
+[Watch the demo](https://youtu.be/LEtR2POYbRI?si=42dowIe5EzObO8RU)
+
 > Agentic install-time supply-chain security gate for npm and PyPI. Multi-agent verdicts, local registry proxy, honest Wilson-CI benchmarks.
 
 ```
