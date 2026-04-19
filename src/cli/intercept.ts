@@ -354,10 +354,14 @@ function formatTakedownBreadcrumb(signal: TakedownSignal): string {
 
 /**
  * Per-process dedupe so npm's repeated metadata fetches during a single
- * install don't spam the TTY/log with the same warning.
+ * install don't spam the TTY/log with the same warning. Window kept short
+ * (5s) so a user-initiated retry — `npm install axios@1.14.1` followed
+ * seconds later by `npm install axios@0.30.4` — still gets a fresh banner
+ * for each command. Wider windows incorrectly suppressed legitimate user
+ * retries with different versions of the same package.
  */
 const seenTakedowns = new Map<string, number>();
-const TAKEDOWN_DEDUPE_MS = 30_000;
+const TAKEDOWN_DEDUPE_MS = 5_000;
 
 function shouldEmitTakedown(packageName: string): boolean {
   const now = Date.now();

@@ -59,24 +59,60 @@ console.log(`  provider:    ${wf.provider ?? "(none)"}`);
 console.log(`  apiEnabled:  ${wf.apiEnabled === true ? `${C.green}true${C.reset}` : `${C.red}false${C.reset}`}`);
 console.log("");
 
-const stages = ["triage", "dynamicNarration", "reporting"];
+// Per-stage interpretation:
+//   - `triage` always runs on every scan, so it's the canonical health check.
+//   - `dynamicNarration` only runs when the sandbox produced output. On a
+//     static-only scan (or any scan where the sandbox didn't fire) it
+//     legitimately falls back to deterministic — that's expected, not a bug.
+//   - `reporting` only runs when there's something noteworthy to narrate;
+//     on a clean popular package it's intentionally skipped.
+//
+// We weight `triage` as the source of truth. The other two showing
+// `deterministic` mode is informational, not a failure.
+const stages = [
+  { name: "triage", canonical: true, expectedSkipReason: null },
+  { name: "dynamicNarration", canonical: false, expectedSkipReason: "no sandbox result for this scan" },
+  { name: "reporting", canonical: false, expectedSkipReason: "nothing to narrate on a clean package" }
+];
+
+let triageWorking = false;
+let triageFailed = false;
 let failures = 0;
-for (const stage of stages) {
-  const s = wf[stage] ?? {};
+
+for (const { name, canonical, expectedSkipReason } of stages) {
+  const s = wf[name] ?? {};
   const err = s.error;
   if (err) {
     failures++;
+    if (canonical) triageFailed = true;
     const code = err.code ?? err.type ?? err.status ?? "unknown";
-    console.log(`  ${C.red}✗ ${stage.padEnd(18)}${C.reset}  ${C.dim}mode=${s.mode}${C.reset}  ${C.red}FAILED${C.reset} ${code}: ${err.message?.slice(0, 100)}`);
+    console.log(`  ${C.red}✗ ${name.padEnd(18)}${C.reset}  ${C.dim}mode=${s.mode}${C.reset}  ${C.red}FAILED${C.reset} ${code}: ${err.message?.slice(0, 100)}`);
   } else if (s.mode === "deterministic") {
-    console.log(`  ${C.yellow}⚠ ${stage.padEnd(18)}${C.reset}  ${C.dim}mode=${s.mode}${C.reset}  ${C.yellow}fallback (no AI call attempted)${C.reset}`);
+    if (canonical) {
+      // triage going deterministic without an error means AI was never
+      // even attempted — usually because the API key is missing.
+      console.log(`  ${C.red}✗ ${name.padEnd(18)}${C.reset}  ${C.dim}mode=${s.mode}${C.reset}  ${C.red}AI not attempted (no API key loaded)${C.reset}`);
+    } else {
+      console.log(`  ${C.dim}- ${name.padEnd(18)}  mode=${s.mode}  ${C.reset}${C.dim}(${expectedSkipReason})${C.reset}`);
+    }
   } else {
-    console.log(`  ${C.green}✓ ${stage.padEnd(18)}${C.reset}  ${C.dim}mode=${s.mode}  model=${s.model ?? "(default)"}${C.reset}`);
+    if (canonical) triageWorking = true;
+    console.log(`  ${C.green}✓ ${name.padEnd(18)}${C.reset}  ${C.dim}mode=${s.mode}  model=${s.model ?? "(default)"}${C.reset}`);
   }
 }
 console.log("");
 
-if (failures > 0) {
+if (triageWorking) {
+  console.log(`${C.green}${C.bold}✓ AI is healthy.${C.reset}  ${C.dim}(triage stage exercised the configured model)${C.reset}`);
+  console.log(`${C.dim}The two skipped stages above are normal — they only run when there's${C.reset}`);
+  console.log(`${C.dim}a sandbox result to narrate or a malicious finding to report.${C.reset}`);
+  console.log("");
+  console.log(`${C.dim}To exercise narration + reporting too, scan a malicious fixture:${C.reset}`);
+  console.log(`  ${C.cyan}node scripts/check-ai.mjs test-fixtures/evil-postinstall${C.reset}`);
+  process.exit(0);
+}
+
+if (triageFailed || failures > 0) {
   console.log(`${C.red}${C.bold}${failures} of ${stages.length} stages are failing.${C.reset}`);
   console.log(`Common fixes:`);
   console.log(`  • 402 "Insufficient credits" → top up at https://openrouter.ai/settings/credits`);
@@ -96,4 +132,5 @@ if (wf.apiEnabled === false) {
   process.exit(1);
 }
 
-console.log(`${C.green}${C.bold}All AI stages are healthy.${C.reset}`);
+console.log(`${C.yellow}AI status indeterminate — triage didn't fire and no error was reported.${C.reset}`);
+process.exit(1);

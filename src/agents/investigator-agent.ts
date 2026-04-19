@@ -102,12 +102,21 @@ export function shouldInvestigate(verdict: HuskVerdict): { borderline: boolean; 
     return { borderline: false, reason: "clean-no-signals" };
   }
 
-  // The two real borderline cases:
+  // Three borderline cases:
   //   1. SUSPICIOUS at moderate confidence — could be a real catch or an FP.
-  //   2. CLEAN with at least one HIGH or multiple MEDIUM signals that
+  //   2. MALICIOUS at moderate confidence — Husk says "this is malware"
+  //      while only 50-70% sure. Investigator can corroborate by reading
+  //      the actual code. Hard guards in applyInvestigation prevent the
+  //      agent from talking away CRITICAL signals; for HIGH-driven
+  //      MALICIOUS verdicts the agent CAN downgrade, which is the right
+  //      behavior for FPs that survived the rule layer.
+  //   3. CLEAN with at least one HIGH or multiple MEDIUM signals that
   //      almost-but-didn't promote.
   if (verdict.verdict === "SUSPICIOUS" && verdict.confidence < 0.7) {
     return { borderline: true, reason: "suspicious-low-confidence" };
+  }
+  if (verdict.verdict === "MALICIOUS" && verdict.confidence < 0.7) {
+    return { borderline: true, reason: "malicious-low-confidence" };
   }
   const hasHighReason = (verdict.reasons ?? []).some((r) => r.severity === "HIGH");
   const mediumCount = (verdict.reasons ?? []).filter((r) => r.severity === "MEDIUM").length;
@@ -446,10 +455,17 @@ export function applyInvestigation(verdict: HuskVerdict, result: InvestigationRe
       break;
     }
     case "downgrade-to-clean": {
-      // Hard guard: never downgrade if there's a CRITICAL IOC. CRITICAL
-      // findings are deterministic facts, not subjective signals the AI
-      // can talk away.
+      // Hard guard 1: never downgrade if there's a CRITICAL IOC.
+      // CRITICAL findings are deterministic facts, not subjective signals
+      // the AI can talk away.
       if (hasCritical) return { ...verdict, investigation: result };
+      // Hard guard 2: downgrades from MALICIOUS require very high agent
+      // confidence (>= 0.8). Upgrades only need 0.5. The asymmetry is
+      // deliberate — false-negatives on real malware are much more
+      // damaging than leaving a borderline FP at SUSPICIOUS.
+      if (verdict.verdict === "MALICIOUS" && result.agentConfidence < 0.8) {
+        return { ...verdict, investigation: result };
+      }
       updated.verdict = "CLEAN";
       updated.confidence = Math.max(0.5, Math.min(0.8, result.agentConfidence));
       updated.reasons = [
